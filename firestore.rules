@@ -1,0 +1,49 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Users can create their own profile, and can only read/write their own data.
+    // Allow reading of public fields for leaderboards.
+    match /users/{userId} {
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && (request.auth.uid == userId || (resource.data.keys().hasAll(['displayName', 'utilityPoints'])));
+      allow update: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Tickets are publicly readable.
+    // Users can create tickets.
+    // Users can "join" a report by updating the reportCount.
+    // Users can provide feedback on resolved tickets.
+    // Other updates are restricted by the app's UI logic.
+    match /tickets/{ticketId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null &&
+                      // Allow joining a report
+                      (request.resource.data.reportCount == resource.data.reportCount + 1 &&
+                       request.resource.data.reportedBy == resource.data.reportedBy.append(request.auth.uid)) ||
+                      // Allow providing feedback
+                      (resource.data.status == 'Resolved' &&
+                       request.resource.data.keys().hasAny(['feedback'])) ||
+                      // Allow municipal/supervisor updates (should be role-based in a real app)
+                      (request.resource.data.keys().hasAny(['status', 'assignedSupervisorId', 'assignedSupervisorName', 'deadlineDate', 'completionNotes', 'completionImageUrls', 'completionAnalysis', 'rejectionReason']));
+    }
+
+    // Supervisors data is locked down. Managed from a trusted environment.
+    match /supervisors/{supervisorId} {
+      allow read, write: if false;
+    }
+    
+    // Municipality data is locked down.
+    match /municipality/{munId} {
+      allow read, write: if false;
+
+      // Supervisors can be managed via the municipal dashboard logic path.
+      match /supervisors/{supervisorId} {
+         allow read, write: if false; // Should be handled by trusted server logic or more complex rules
+      }
+    }
+  }
+}
