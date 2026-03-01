@@ -13,16 +13,20 @@ import type { Ticket, UserProfile } from '@/types';
 import ViewTickets from '@/components/view-tickets';
 import { useToast } from '@/hooks/use-toast';
 import { allBadges } from '@/lib/badges';
-
+import { Map as MapIcon, LocateFixed, Users, ShieldAlert, Navigation } from "lucide-react";
 
 const MapView = dynamic(() => import('@/components/map-view'), {
   ssr: false,
-  loading: () => <Skeleton className="h-[500px] w-full rounded-lg" />,
+  loading: () => <div className="h-[600px] w-full bg-slate-50 animate-pulse rounded-[2.5rem] border-2 border-dashed border-slate-200 flex items-center justify-center">
+    <div className="flex flex-col items-center gap-4 text-slate-400">
+      <MapIcon className="h-10 w-10" />
+      <span className="font-black uppercase tracking-widest text-[10px]">Initializing Map...</span>
+    </div>
+  </div>,
 });
 
-// Function to calculate distance between two lat/lng points in km
 function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
-    const R = 6371; // Radius of the earth in km
+    const R = 6371;
     const dLat = deg2rad(lat2 - lat1);
     const dLon = deg2rad(lon2 - lon1);
     const a =
@@ -31,14 +35,13 @@ function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon
         Math.sin(dLon / 2) * Math.sin(dLon / 2)
     ;
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const d = R * c; // Distance in km
+    const d = R * c;
     return d;
 }
 
 function deg2rad(deg: number) {
     return deg * (Math.PI / 180)
 }
-
 
 export default function MapViewPage() {
   const { user, loading } = useAuth();
@@ -104,14 +107,14 @@ export default function MapViewPage() {
   React.useEffect(() => {
     if (userLocation && tickets.length > 0) {
         const nearby = tickets.filter(ticket => {
-            if (ticket.location) {
+            if (ticket.location && ticket.status !== 'Resolved') {
                 const distance = getDistanceFromLatLonInKm(
                     userLocation.latitude,
                     userLocation.longitude,
                     ticket.location.latitude,
                     ticket.location.longitude
                 );
-                return distance <= 0.1; // 100 meters radius
+                return distance <= 0.5;
             }
             return false;
         });
@@ -139,7 +142,6 @@ export default function MapViewPage() {
                 return;
             }
 
-            // Badge Logic: Team Player
             const userProfileRef = doc(db, 'users', user.uid);
             const userProfileDoc = await transaction.get(userProfileRef);
             const userProfile = userProfileDoc.data() as UserProfile;
@@ -148,7 +150,6 @@ export default function MapViewPage() {
             if (!userBadges.includes('team-player')) {
                 const joinedTicketsQuery = query(collection(db, 'tickets'), where('reportedBy', 'array-contains', user.uid));
                 const joinedTicketsSnapshot = await getDocs(joinedTicketsQuery);
-                // We check for 4 because this current join will be the 5th
                 if (joinedTicketsSnapshot.docs.filter(d => d.data().userId !== user.uid).length === 4) {
                     const badge = allBadges.find(b => b.id === 'team-player');
                     transaction.update(userProfileRef, { badges: arrayUnion('team-player') });
@@ -183,43 +184,94 @@ export default function MapViewPage() {
     }
   };
 
-
   if (loading || !user) {
     return null;
   }
 
-  return (
-    <div className="p-4 md:p-6 lg:p-8 space-y-6">
-      <div className="max-w-5xl mx-auto">
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-headline">Issue Map</CardTitle>
-            <CardDescription>
-              Here is a map view of all reported issues in the community.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {dataLoading ? <Skeleton className="h-[500px] w-full rounded-lg" /> : <MapView tickets={tickets} onJoinReport={handleJoinReport} />}
-          </CardContent>
-        </Card>
-      </div>
+  const unresolvedTickets = tickets.filter(ticket => ticket.status !== 'Resolved');
 
-       <div className="max-w-5xl mx-auto">
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-headline">Nearby Issues</CardTitle>
-            <CardDescription>
-              Issues reported within a 100m radius of your current location.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {userLocation ? (
-                <ViewTickets tickets={nearbyTickets} onJoinReport={handleJoinReport} isNearbyView={true} />
+  return (
+    <div className="min-h-screen bg-slate-50/50 p-4 md:p-12 lg:p-16">
+      <div className="max-w-6xl mx-auto space-y-10">
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 border-b border-slate-200 pb-8">
+          <div>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="bg-indigo-600 p-2.5 rounded-xl shadow-lg shadow-indigo-600/20 text-white">
+                <MapIcon className="h-5 w-5" />
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Map Interface</span>
+            </div>
+            <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tighter">Community Map.</h1>
+            <p className="text-slate-500 font-medium text-base mt-2 italic max-w-xl">Explore active reports across your community. Your location helps identify nearby priorities.</p>
+          </div>
+          <div className="hidden lg:flex bg-white p-4 rounded-3xl border border-slate-100 shadow-sm items-center gap-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600">
+                <ShieldAlert className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 leading-none mb-1">Active Alerts</p>
+                <p className="text-sm font-black text-slate-900 leading-none">{unresolvedTickets.length}</p>
+              </div>
+            </div>
+            <div className="w-px h-8 bg-slate-100" />
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
+                <Users className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 leading-none mb-1">Impact Level</p>
+                <p className="text-sm font-black text-slate-900 leading-none">High</p>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-2xl shadow-slate-200/50 overflow-hidden">
+          <div className="p-8 pb-4">
+            <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+              <Navigation className="h-5 w-5 text-indigo-600" />
+              Live Visualization
+            </h3>
+          </div>
+          <div className="p-8 pt-0">
+            {dataLoading ? (
+              <Skeleton className="h-[600px] w-full rounded-[2rem]" />
             ) : (
-                <p className="text-muted-foreground text-sm text-center">Getting your location to find nearby issues...</p>
+              <div className="rounded-[2rem] overflow-hidden border border-slate-100 shadow-inner">
+                <MapView 
+                    tickets={unresolvedTickets} 
+                    onJoinReport={handleJoinReport} 
+                    userLocation={userLocation}
+                />
+              </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+
+        <div className="space-y-8">
+          <div className="flex items-center gap-3">
+            <div className="bg-emerald-600 p-2 rounded-xl text-white shadow-lg shadow-emerald-600/20">
+              <LocateFixed className="h-4 w-4" />
+            </div>
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight">Issues Within 500m.</h2>
+          </div>
+          
+          {userLocation ? (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-1000">
+              <ViewTickets tickets={nearbyTickets} onJoinReport={handleJoinReport} isNearbyView={true} />
+            </div>
+          ) : (
+            <Card className="rounded-[2.5rem] border-slate-100 bg-slate-50 p-12 text-center">
+              <CardContent className="space-y-4">
+                <div className="w-16 h-16 rounded-full bg-white mx-auto flex items-center justify-center border border-slate-100">
+                  <LocateFixed className="h-8 w-8 text-slate-300 animate-pulse" />
+                </div>
+                <p className="text-slate-500 font-medium">Using GPS to find nearby reports...</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       </div>
     </div>
   );

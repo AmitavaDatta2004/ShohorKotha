@@ -1,4 +1,3 @@
-
 "use client";
 
 import TicketCard from "./ticket-card";
@@ -38,6 +37,8 @@ export default function ViewTickets({ tickets, supervisors, isMunicipalView = fa
     return acc;
   }, {} as Record<string, Ticket[]>);
 
+  const firstPendingId = tickets.find(t => t.status === 'Pending Approval')?.id;
+
   return (
     <div className="space-y-6">
       {Object.entries(groupedTickets).map(([category, categoryTickets]) => (
@@ -59,6 +60,7 @@ export default function ViewTickets({ tickets, supervisors, isMunicipalView = fa
                   isSupervisorView={isSupervisorView}
                   isNearbyView={isNearbyView}
                   onJoinReport={onJoinReport}
+                  id={ticket.id === firstPendingId ? "pending-approval-anchor" : undefined}
                 />
               ))}
             </div>

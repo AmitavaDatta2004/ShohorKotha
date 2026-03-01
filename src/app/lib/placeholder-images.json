@@ -1,0 +1,16 @@
+{
+  "hero": {
+    "url": "https://picsum.photos/seed/vision/1920/1080",
+    "width": 1920,
+    "height": 1080,
+    "alt": "Smart City Future",
+    "hint": "smart city architecture"
+  },
+  "uiPreview": {
+    "url": "https://picsum.photos/seed/ui/1000/800",
+    "width": 1000,
+    "height": 800,
+    "alt": "CivicPulse Ecosystem",
+    "hint": "modern mobile application interface"
+  }
+}

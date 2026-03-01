@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   try {
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'ShohorKotha/1.0 (https://your-app-url.com)', // Replace with your app's URL or identifier
+        'User-Agent': 'CivicPulse/1.0', 
       },
     });
 
@@ -26,7 +26,10 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json();
-    return NextResponse.json({ address: data.display_name });
+    return NextResponse.json({ 
+      address: data.display_name,
+      pincode: data.address?.postcode || "" 
+    });
 
   } catch (error) {
     console.error('Error proxying to Nominatim:', error);

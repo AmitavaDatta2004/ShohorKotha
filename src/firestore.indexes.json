@@ -28,6 +28,24 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "tickets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "isPublicFeed",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "pincode",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "submittedDate",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ]
 }

@@ -1,6 +1,6 @@
 'use server';
 /**
- * @fileOverview An audio transcription AI agent.
+ * @fileOverview An audio transcription AI agent using Gemini 2.5 Flash.
  *
  * - transcribeAudio - A function that handles the audio transcription process.
  * - TranscribeAudioInput - The input type for the transcribeAudio function.
@@ -40,7 +40,7 @@ const transcribeAudioFlow = ai.defineFlow(
     const result = await ai.generate({
       model: 'googleai/gemini-2.5-flash',
       prompt: [
-        {text: 'Transcribe the following audio. Respond with only the transcription.'},
+        {text: 'Transcribe the following audio accurately. Respond with only the transcription.'},
         {media: {
             url: input.audioDataUri,
         }}

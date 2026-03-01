@@ -28,10 +28,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, ShieldAlert, Star, Pencil } from "lucide-react";
+import { Loader2, ShieldAlert, Star, Pencil, UserPlus, Fingerprint, Phone, LayoutList } from "lucide-react";
 import type { Supervisor } from "@/types";
 import { Badge } from "./ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
+import { cn } from "@/lib/utils";
 
 const createFormSchema = z.object({
   name: z.string().min(3, "Name must be at least 3 characters."),
@@ -108,8 +109,6 @@ export default function ManageSupervisors({ municipalId, supervisors }: ManageSu
 
     setIsCreateLoading(true);
     try {
-      // Note: We are writing to two locations for querying flexibility.
-      // One is nested under the municipality for direct access, the other is a root collection for global queries.
       const supervisorData = {
         ...values,
         municipalId,
@@ -118,15 +117,11 @@ export default function ManageSupervisors({ municipalId, supervisors }: ManageSu
         efficiencyPoints: 0,
       }
       
-      const supervisorDocRef = await addDoc(collection(db, 'supervisors'), supervisorData);
-      
-      // We can use the ID from the root collection doc to keep them in sync if needed,
-      // but for this app structure, we'll keep them separate.
-      await addDoc(collection(db, `municipality/${municipalId}/supervisors`), supervisorData);
+      await addDoc(collection(db, 'supervisors'), supervisorData);
       
       toast({
-        title: "Supervisor Created",
-        description: "The new supervisor account has been created successfully.",
+        title: "Staff Account Created",
+        description: `The account for ${values.name} is now active.`,
       });
       createForm.reset();
     } catch (error) {
@@ -134,7 +129,7 @@ export default function ManageSupervisors({ municipalId, supervisors }: ManageSu
       toast({
         variant: "destructive",
         title: "Creation Failed",
-        description: "There was an error creating the supervisor.",
+        description: "There was an error creating the account.",
       });
     } finally {
       setIsCreateLoading(false);
@@ -157,7 +152,7 @@ export default function ManageSupervisors({ municipalId, supervisors }: ManageSu
 
       if (values.password) {
         if (values.password.length < 6) {
-          editForm.setError("password", { message: "Password must be at least 6 characters."});
+          editForm.setError("password", { message: "Minimum 6 characters required."});
           setIsEditLoading(false);
           return;
         }
@@ -166,19 +161,9 @@ export default function ManageSupervisors({ municipalId, supervisors }: ManageSu
       
       await updateDoc(supervisorRef, dataToUpdate);
 
-      // Also update the nested document if it exists. This is brittle and ideally would be a Cloud Function.
-      // For now, we assume the structure is consistent.
-      const nestedSupervisorRef = doc(db, `municipality/${municipalId}/supervisors`, editingSupervisor.id);
-      try {
-        await updateDoc(nestedSupervisorRef, dataToUpdate);
-      } catch (e) {
-        console.warn("Could not update nested supervisor doc. It may not exist.", e)
-      }
-
-
       toast({
-        title: "Supervisor Updated",
-        description: `${values.name}'s details have been updated.`,
+        title: "Staff Info Updated",
+        description: `Account details for ${values.name} have been modified.`,
       });
       setIsEditDialogOpen(false);
       setEditingSupervisor(null);
@@ -187,7 +172,7 @@ export default function ManageSupervisors({ municipalId, supervisors }: ManageSu
       toast({
         variant: "destructive",
         title: "Update Failed",
-        description: "There was an error updating the supervisor.",
+        description: "Error modifying staff data.",
       });
     } finally {
       setIsEditLoading(false);
@@ -200,207 +185,79 @@ export default function ManageSupervisors({ municipalId, supervisors }: ManageSu
   }
 
   return (
-    <>
-    <Card>
-      <CardHeader>
-        <CardTitle>Create Supervisor</CardTitle>
-        <CardDescription>Create a new supervisor account.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...createForm}>
-          <form onSubmit={createForm.handleSubmit(onCreateSubmit)} className="space-y-4">
-            <FormField
-              control={createForm.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="John Doe" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={createForm.control}
-              name="userId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>User ID</FormLabel>
-                  <FormControl>
-                    <Input placeholder="supervisor.one" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={createForm.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Password</FormLabel>
-                  <FormControl>
-                    <Input type="password" placeholder="••••••••" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-             <FormField
-              control={createForm.control}
-              name="department"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Department</FormLabel>
-                   <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a department" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {departments.map((dept) => (
-                        <SelectItem key={dept} value={dept}>
-                          {dept}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-             <FormField
-              control={createForm.control}
-              name="phoneNumber"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Phone Number</FormLabel>
-                  <FormControl>
-                    <Input placeholder="123-456-7890" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <Button type="submit" disabled={isCreateLoading} className="w-full">
-              {isCreateLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Create Supervisor
-            </Button>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
-
-    <Card className="mt-8">
-        <CardHeader>
-            <CardTitle>Existing Supervisors</CardTitle>
-            <CardDescription>View and manage all supervisors for this municipality.</CardDescription>
-        </CardHeader>
-        <CardContent>
-             <div className="border rounded-md">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Name</TableHead>
-                            <TableHead>User ID</TableHead>
-                            <TableHead>Department</TableHead>
-                            <TableHead>Phone</TableHead>
-                            <TableHead className="text-center">Trust</TableHead>
-                            <TableHead className="text-center">Warnings</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {supervisors.length > 0 ? (
-                            supervisors.map(s => (
-                                <TableRow key={s.id}>
-                                    <TableCell className="font-medium">{s.name}</TableCell>
-                                    <TableCell>{s.userId}</TableCell>
-                                    <TableCell>{s.department}</TableCell>
-                                    <TableCell>{s.phoneNumber}</TableCell>
-                                    <TableCell className="text-center">
-                                        <Badge variant={(s.trustPoints || 100) < 100 ? 'destructive' : 'secondary'} className="flex items-center gap-1.5 w-fit mx-auto">
-                                            <Star className="h-3.5 w-3.5" />
-                                            <span>{s.trustPoints || 100}</span>
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                        <Badge variant={s.aiImageWarningCount && s.aiImageWarningCount > 0 ? 'destructive' : 'secondary'} className="flex items-center gap-1.5 w-fit mx-auto">
-                                            <ShieldAlert className="h-3.5 w-3.5" />
-                                            <span>{s.aiImageWarningCount || 0}</span>
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                      <Button variant="ghost" size="icon" onClick={() => handleEditClick(s)}>
-                                        <Pencil className="h-4 w-4" />
-                                      </Button>
-                                    </TableCell>
-                                </TableRow>
-                            ))
-                        ) : (
-                            <TableRow>
-                                <TableCell colSpan={7} className="text-center">No supervisors created yet.</TableCell>
-                            </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
+    <div className="grid lg:grid-cols-12 gap-8 items-start">
+      <Card className="lg:col-span-4 rounded-[2.5rem] border-slate-100 shadow-2xl shadow-slate-200/50 overflow-hidden bg-white group">
+        <CardHeader className="p-8 pb-4">
+          <div className="flex items-center gap-4 mb-2">
+            <div className="bg-indigo-50 p-3 rounded-2xl text-indigo-600 group-hover:scale-110 transition-transform duration-500">
+              <UserPlus className="h-5 w-5"/>
             </div>
-        </CardContent>
-    </Card>
-
-    <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Supervisor: {editingSupervisor?.name}</DialogTitle>
-          </DialogHeader>
-          <Form {...editForm}>
-            <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4">
+            <div>
+              <CardTitle className="text-xl font-black text-slate-900 tracking-tight">Add New Staff</CardTitle>
+              <CardDescription className="font-medium text-slate-500 text-xs">Create a new field supervisor account.</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="px-8 pb-8">
+          <Form {...createForm}>
+            <form onSubmit={createForm.handleSubmit(onCreateSubmit)} className="space-y-6">
               <FormField
-                control={editForm.control}
+                control={createForm.control}
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Name</FormLabel>
-                    <FormControl><Input {...field} /></FormControl>
+                    <FormLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400">Full Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="John Doe" className="h-12 rounded-xl border-2 font-bold px-4" {...field} />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={createForm.control}
+                  name="userId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400">Login ID</FormLabel>
+                      <FormControl>
+                        <Input placeholder="john.doe" className="h-12 rounded-xl border-2 font-bold px-4" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={createForm.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400">Password</FormLabel>
+                      <FormControl>
+                        <Input type="password" placeholder="••••••••" className="h-12 rounded-xl border-2 font-bold px-4" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
               <FormField
-                control={editForm.control}
-                name="userId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>User ID</FormLabel>
-                    <FormControl><Input {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={editForm.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>New Password</FormLabel>
-                    <FormControl><Input type="password" {...field} placeholder="Leave blank to keep current password" /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={editForm.control}
+                control={createForm.control}
                 name="department"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Department</FormLabel>
+                    <FormLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400">Department</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        {departments.map((dept) => (<SelectItem key={dept} value={dept}>{dept}</SelectItem>))}
+                      <FormControl>
+                        <SelectTrigger className="h-12 rounded-xl border-2 font-bold px-4">
+                          <SelectValue placeholder="Select Department" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent className="rounded-xl border-2">
+                        {departments.map((dept) => (
+                          <SelectItem key={dept} value={dept} className="font-bold">{dept}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -408,24 +265,177 @@ export default function ManageSupervisors({ municipalId, supervisors }: ManageSu
                 )}
               />
               <FormField
-                control={editForm.control}
+                control={createForm.control}
                 name="phoneNumber"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Phone Number</FormLabel>
-                    <FormControl><Input {...field} /></FormControl>
+                    <FormLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400">Phone Number</FormLabel>
+                    <FormControl>
+                      <Input placeholder="555-0123" className="h-12 rounded-xl border-2 font-bold px-4" {...field} />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <Button type="submit" disabled={isEditLoading} className="w-full">
-                {isEditLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Save Changes
+              <Button type="submit" disabled={isCreateLoading} className="w-full h-14 rounded-2xl bg-indigo-600 hover:bg-indigo-700 font-black shadow-xl shadow-indigo-600/20 text-xs uppercase tracking-widest transition-all">
+                {isCreateLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Create Account'}
+              </Button>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
+
+      <Card className="lg:col-span-8 rounded-[2.5rem] border-slate-100 shadow-2xl shadow-slate-200/50 overflow-hidden bg-white group">
+        <CardHeader className="p-8 pb-4">
+          <div className="flex items-center gap-4 mb-2">
+            <div className="bg-slate-950 p-3 rounded-2xl text-white">
+              <LayoutList className="h-5 w-5"/>
+            </div>
+            <div>
+              <CardTitle className="text-xl font-black text-slate-900 tracking-tight">Current Staff</CardTitle>
+              <CardDescription className="font-medium text-slate-500 text-xs">A list of all active field supervisors.</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-slate-50 hover:bg-transparent">
+                <TableHead className="pl-8 text-[10px] font-black uppercase tracking-widest text-slate-400">Name</TableHead>
+                <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400">Department</TableHead>
+                <TableHead className="text-center text-[10px] font-black uppercase tracking-widest text-slate-400">Trust Score</TableHead>
+                <TableHead className="text-right pr-8 text-[10px] font-black uppercase tracking-widest text-slate-400">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {supervisors.length > 0 ? (
+                supervisors.map(s => (
+                  <TableRow key={s.id} className="border-slate-50 hover:bg-slate-50/50 transition-colors group/row">
+                    <TableCell className="pl-8 py-6">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 group-hover/row:bg-indigo-600 group-hover/row:text-white transition-colors">
+                          <Fingerprint className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="font-black text-slate-900 text-sm">{s.name}</p>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ID: {s.userId}</p>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-bold px-3 py-1 rounded-lg border-none text-[10px]">
+                        {s.department}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant={(s.trustPoints || 100) < 90 ? 'destructive' : 'secondary'} className={cn(
+                        "font-black text-[10px] uppercase gap-1.5 px-3 py-1 rounded-lg",
+                        (s.trustPoints || 100) >= 90 ? "bg-emerald-50 text-emerald-700" : ""
+                      )}>
+                        <Star className={cn("h-3 w-3", (s.trustPoints || 100) >= 90 ? "fill-emerald-700" : "")} />
+                        {s.trustPoints || 100}%
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right pr-8">
+                      <Button variant="ghost" size="icon" className="rounded-xl hover:bg-indigo-50 hover:text-indigo-600" onClick={() => handleEditClick(s)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center py-20 text-slate-400 font-medium">No staff members found.</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="rounded-[3rem] p-10 border-none shadow-2xl max-w-lg">
+          <DialogHeader className="mb-6">
+            <div className="flex items-center gap-4">
+              <div className="bg-indigo-600 p-3 rounded-2xl text-white">
+                <Pencil className="h-5 w-5" />
+              </div>
+              <DialogTitle className="text-2xl font-black tracking-tight">Edit Staff Info</DialogTitle>
+            </div>
+          </DialogHeader>
+          <Form {...editForm}>
+            <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-6">
+              <FormField
+                control={editForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400">Name</FormLabel>
+                    <FormControl><Input className="h-12 rounded-xl border-2 font-bold" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="userId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400">ID</FormLabel>
+                      <FormControl><Input className="h-12 rounded-xl border-2 font-bold" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={editForm.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400">New Password</FormLabel>
+                      <FormControl><Input type="password" {...field} placeholder="Leave blank to keep" className="h-12 rounded-xl border-2 font-bold" /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="department"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400">Department</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl><SelectTrigger className="h-12 rounded-xl border-2 font-bold"><SelectValue /></SelectTrigger></FormControl>
+                        <SelectContent className="rounded-xl border-2">
+                          {departments.map((dept) => (<SelectItem key={dept} value={dept} className="font-bold">{dept}</SelectItem>))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={editForm.control}
+                  name="phoneNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400">Phone</FormLabel>
+                      <FormControl><Input className="h-12 rounded-xl border-2 font-bold" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <Button type="submit" disabled={isEditLoading} className="w-full h-14 rounded-2xl bg-indigo-600 font-black shadow-xl uppercase tracking-widest">
+                {isEditLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save Changes'}
               </Button>
             </form>
           </Form>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }

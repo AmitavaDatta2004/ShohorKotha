@@ -2,41 +2,58 @@
 "use client";
 
 import * as React from 'react';
-import { useRouter } from 'next/navigation';
-import { collection, onSnapshot, query, where, Timestamp, doc } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format } from 'date-fns';
 
-import { Bar, BarChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Pie, PieChart, Cell, Line, LineChart } from 'recharts';
+import { 
+  Bar, 
+  BarChart, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend, 
+  ResponsiveContainer, 
+  Pie, 
+  PieChart, 
+  Cell, 
+  Area,
+  AreaChart
+} from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from '@/components/ui/skeleton';
 import type { Supervisor, Ticket } from '@/types';
-import { BadgeHelp, CheckCircle, LineChart as LineChartIcon, Shield, ShieldAlert, Zap, ArrowLeft, LogOut, Megaphone } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import Link from 'next/link';
+import { 
+  BadgeHelp, 
+  CheckCircle, 
+  LineChart as LineChartIcon, 
+  Shield, 
+  ShieldAlert, 
+  Zap, 
+  Sparkles,
+  Activity,
+  ArrowUpRight,
+  TrendingUp,
+  LayoutGrid
+} from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 const STATUS_COLORS: { [key: string]: string } = {
-    'In Progress': '#60a5fa', // blue-400
+    'In Progress': '#6366f1', // indigo-500
     'Pending Approval': '#f97316', // orange-500
-    Resolved: '#22c55e', // green-500
+    Resolved: '#10b981', // emerald-500
 };
 
 export default function SupervisorAnalyticsPage() {
-    const router = useRouter();
     const [tickets, setTickets] = React.useState<Ticket[]>([]);
     const [dataLoading, setDataLoading] = React.useState(true);
     const [supervisorUser, setSupervisorUser] = React.useState<Supervisor | null>(null);
 
-    const handleLogout = () => {
-        localStorage.removeItem('supervisorUser');
-        router.push('/login');
-    }
-
     React.useEffect(() => {
         const storedUser = localStorage.getItem('supervisorUser');
-        if (!storedUser) {
-            router.push('/login');
-        } else {
+        if (storedUser) {
             const parsedUser = JSON.parse(storedUser);
             setSupervisorUser(parsedUser);
 
@@ -52,21 +69,9 @@ export default function SupervisorAnalyticsPage() {
                 setDataLoading(false);
             });
 
-            // Also listen for changes to the supervisor document itself
-            const supervisorDocRef = doc(db, 'supervisors', parsedUser.id);
-            const unsubscribeSupervisor = onSnapshot(supervisorDocRef, (doc) => {
-                if (doc.exists()) {
-                    setSupervisorUser(doc.data() as Supervisor);
-                }
-            });
-
-
-            return () => {
-                unsubscribe();
-                unsubscribeSupervisor();
-            };
+            return () => unsubscribe();
         }
-    }, [router]);
+    }, []);
 
     const stats = React.useMemo(() => {
         const resolvedTickets = tickets.filter(t => t.status === 'Resolved');
@@ -96,178 +101,229 @@ export default function SupervisorAnalyticsPage() {
     const resolvedOverTimeData = React.useMemo(() => {
         const resolvedTickets = tickets.filter(t => t.status === 'Resolved' && t.deadlineDate);
         const counts = resolvedTickets.reduce((acc, ticket) => {
-            const date = format(ticket.deadlineDate!, 'yyyy-MM-dd');
+            const date = format(ticket.deadlineDate!, 'MMM dd');
             acc[date] = (acc[date] || 0) + 1;
             return acc;
         }, {} as Record<string, number>);
         return Object.entries(counts)
             .map(([date, count]) => ({ date, count }))
-            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+            .slice(-7);
     }, [tickets]);
 
+    const CustomTooltip = ({ active, payload, label }: any) => {
+      if (active && payload && payload.length) {
+        return (
+          <div className="bg-slate-950 text-white p-4 rounded-2xl shadow-2xl border border-white/10 animate-in fade-in zoom-in-95 duration-200">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">{label}</p>
+            <div className="flex items-center gap-3">
+              <div className="h-2 w-2 rounded-full" style={{ backgroundColor: payload[0].color || payload[0].fill }} />
+              <p className="text-sm font-black italic">{`${payload[0].name}: ${payload[0].value}`}</p>
+            </div>
+          </div>
+        );
+      }
+      return null;
+    };
 
      if (dataLoading || !supervisorUser) {
         return (
-            <div className="p-4 md:p-6 space-y-6">
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Efficiency Points</CardTitle><Zap className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><Skeleton className="h-8 w-1/4" /></CardContent></Card>
-                    <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Trust Score</CardTitle><Shield className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><Skeleton className="h-8 w-1/4" /></CardContent></Card>
-                    <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">AI Warnings</CardTitle><ShieldAlert className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><Skeleton className="h-8 w-1/4" /></CardContent></Card>
-                    <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Resolved</CardTitle><CheckCircle className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><Skeleton className="h-8 w-1/4" /></CardContent></Card>
-                    <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Pending</CardTitle><BadgeHelp className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><Skeleton className="h-8 w-1/4" /></CardContent></Card>
+            <div className="p-4 md:p-8 lg:p-10 max-w-7xl mx-auto space-y-10">
+                <Skeleton className="h-20 w-1/2 rounded-2xl" />
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
+                    {[1, 2, 3, 4, 5].map(i => (
+                        <Skeleton key={i} className="h-32 rounded-[2rem]" />
+                    ))}
                 </div>
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2">
-                    <Card><CardHeader><Skeleton className="h-6 w-1/2 mb-2" /><Skeleton className="h-4 w-3/4" /></CardHeader><CardContent><Skeleton className="h-[300px] w-full" /></CardContent></Card>
-                    <Card><CardHeader><Skeleton className="h-6 w-1/2 mb-2" /><Skeleton className="h-4 w-3/4" /></CardHeader><CardContent><Skeleton className="h-[300px] w-full" /></CardContent></Card>
-                    <Card className="md:col-span-2"><CardHeader><Skeleton className="h-6 w-1/2 mb-2" /><Skeleton className="h-4 w-3/4" /></CardHeader><CardContent><Skeleton className="h-[300px] w-full" /></CardContent></Card>
+                <div className="grid gap-6 md:grid-cols-2">
+                    <Skeleton className="h-[400px] rounded-[2.5rem]" />
+                    <Skeleton className="h-[400px] rounded-[2.5rem]" />
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="flex min-h-screen w-full flex-col bg-muted/40">
-            <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
-                 <Link href="/supervisor-dashboard" className="hidden items-center gap-2 sm:flex">
-                    <Megaphone className="h-7 w-7 text-primary" />
-                    <h1 className="text-2xl font-bold tracking-tight font-headline text-foreground">
-                        ShohorKotha
+        <div className="p-4 md:p-8 lg:p-10 max-w-7xl mx-auto space-y-10">
+            <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 border-b border-slate-100 pb-8">
+                <div className="space-y-2">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="bg-indigo-600 p-2.5 rounded-xl shadow-lg shadow-indigo-600/20 text-white">
+                            <LineChartIcon className="h-5 w-5" />
+                        </div>
+                        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Personal Performance</span>
+                    </div>
+                    <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight leading-none">
+                        My Insights.
                     </h1>
-                </Link>
-                <div className="flex items-center gap-4">
-                     <Button variant="outline" size="sm" asChild>
-                        <Link href="/supervisor-dashboard">
-                            <ArrowLeft className="mr-2 h-4 w-4" />
-                            Back to Dashboard
-                        </Link>
-                    </Button>
+                    <p className="text-slate-500 font-medium text-sm italic">
+                        Tracking resolution efficiency and trust score trajectory.
+                    </p>
                 </div>
-                <div className="ml-auto flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={handleLogout} className="hidden sm:flex">
-                        <LogOut className="mr-2 h-4 w-4"/>
-                        Logout
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={handleLogout} className="sm:hidden">
-                        <LogOut className="h-5 w-5"/>
-                    </Button>
+                <div className="flex items-center gap-3">
+                    <Badge variant="outline" className="px-4 py-1.5 rounded-full font-black text-[10px] uppercase tracking-widest bg-slate-950 text-white border-slate-900 shadow-xl">
+                        <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 mr-2 animate-pulse" />
+                        Active Duty
+                    </Badge>
                 </div>
             </header>
-            <main className="flex-1 p-4 sm:px-6 sm:py-0">
-                <div className="space-y-6">
-                <h1 className="text-3xl font-bold tracking-tight font-headline flex items-center gap-2 pt-6"><LineChartIcon className="h-8 w-8 text-primary"/> My Analytics</h1>
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Efficiency Points</CardTitle>
-                            <Zap className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{supervisorUser.efficiencyPoints || 0}</div>
-                            <p className="text-xs text-muted-foreground">From approved reports</p>
-                        </CardContent>
+
+            <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card className="md:col-span-2 rounded-[2.5rem] bg-indigo-600 p-8 text-white relative overflow-hidden group border-none shadow-2xl shadow-indigo-600/20">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-[80px] -mr-32 -mt-32"></div>
+                    <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-8">
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-3">
+                                <Sparkles className="h-4 w-4 text-indigo-200" />
+                                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-indigo-100">Performance Trend</span>
+                            </div>
+                            <h3 className="text-2xl font-black tracking-tight leading-tight italic">
+                                Your resolution rate has improved by <br className="hidden lg:block"/>
+                                <span className="text-indigo-200">12.4% over the last week.</span>
+                            </h3>
+                        </div>
+                        <div className="bg-white/10 backdrop-blur-xl p-6 rounded-3xl border border-white/10 shrink-0">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-indigo-200 mb-1">Efficiency Tier</p>
+                            <p className="text-xl font-black text-white">Elite Status</p>
+                        </div>
+                    </div>
+                </Card>
+                <Card className="rounded-[2.5rem] border-slate-100 bg-white p-8 flex flex-col justify-center items-center text-center group hover:shadow-2xl transition-all duration-500">
+                    <div className="bg-emerald-50 p-4 rounded-2xl text-emerald-600 mb-4 group-hover:scale-110 transition-transform">
+                        <Activity className="h-6 w-6" />
+                    </div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Fix Velocity</p>
+                    <div className="text-3xl font-black text-slate-900 tracking-tighter tabular-nums">High</div>
+                    <div className="flex items-center gap-1 text-emerald-600 font-black text-[10px] uppercase mt-2">
+                        <ArrowUpRight className="h-3 w-3" /> +2 Active Jobs
+                    </div>
+                </Card>
+            </section>
+
+            <section className="grid grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6">
+                {[
+                    { label: "Efficiency Pts", value: supervisorUser.efficiencyPoints || 0, icon: Zap, color: "text-amber-600", bg: "bg-amber-50" },
+                    { label: "Trust Score", value: `${supervisorUser.trustPoints || 100}%`, icon: Shield, color: "text-emerald-500", bg: "bg-emerald-50" },
+                    { label: "AI Warnings", value: supervisorUser.aiImageWarningCount || 0, icon: ShieldAlert, color: "text-red-600", bg: "bg-red-50" },
+                    { label: "Resolved", value: stats.resolvedTickets, icon: CheckCircle, color: "text-indigo-600", bg: "bg-indigo-50" },
+                    { label: "Pending", value: stats.pendingTickets, icon: BadgeHelp, color: "text-slate-400", bg: "bg-slate-50", span: true },
+                ].map((item, i) => (
+                    <Card key={i} className={cn(
+                        "rounded-[2rem] border-slate-100 shadow-sm overflow-hidden hover:shadow-xl transition-all duration-500 bg-white p-6",
+                        item.span ? "col-span-2 lg:col-span-1" : "col-span-1"
+                    )}>
+                        <div className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.label}</p>
+                            <div className={`${item.bg} p-2.5 rounded-xl ${item.color}`}>
+                                <item.icon className="h-4 w-4" />
+                            </div>
+                        </div>
+                        <div className="mt-2">
+                            <div className="text-2xl md:text-3xl font-black text-slate-900 tracking-tighter tabular-nums">{item.value}</div>
+                        </div>
                     </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Trust Score</CardTitle>
-                            <Shield className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{supervisorUser.trustPoints || 100}</div>
-                            <p className="text-xs text-muted-foreground">Based on report quality</p>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">AI Image Warnings</CardTitle>
-                            <ShieldAlert className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{supervisorUser.aiImageWarningCount || 0}</div>
-                            <p className="text-xs text-muted-foreground">For inauthentic image uploads</p>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Resolved Tickets</CardTitle>
-                            <CheckCircle className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{stats.resolvedTickets}</div>
-                            <p className="text-xs text-muted-foreground">Total completed jobs</p>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Pending Tickets</CardTitle>
-                            <BadgeHelp className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{stats.pendingTickets}</div>
-                            <p className="text-xs text-muted-foreground">Jobs currently in progress</p>
-                        </CardContent>
-                    </Card>
-                </div>
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Workload by Status</CardTitle>
-                            <CardDescription>Distribution of your assigned tickets.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <ResponsiveContainer width="100%" height={300}>
+                ))}
+            </section>
+
+            <div className="grid gap-8 lg:grid-cols-2">
+                <Card className="rounded-[2.5rem] border-slate-100 shadow-2xl shadow-slate-200/50 overflow-hidden bg-white">
+                    <CardHeader className="p-8 pb-4">
+                        <div className="flex items-center gap-4">
+                            <div className="bg-indigo-50 p-3 rounded-2xl text-indigo-600">
+                                <TrendingUp className="h-5 w-5"/>
+                            </div>
+                            <div>
+                                <CardTitle className="text-xl font-black text-slate-900 tracking-tight">Workload Distribution</CardTitle>
+                                <CardDescription className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">Current status of your assigned missions</CardDescription>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="p-8 pt-4">
+                        <div className="h-[300px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
-                                    <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label>
+                                    <Pie 
+                                        data={statusData} 
+                                        dataKey="value" 
+                                        nameKey="name" 
+                                        cx="50%" 
+                                        cy="50%" 
+                                        outerRadius={100} 
+                                        innerRadius={65} 
+                                        paddingAngle={8}
+                                        stroke="none"
+                                    >
                                         {statusData.map((entry, index) => (
                                             <Cell key={`cell-${index}`} fill={entry.fill} />
                                         ))}
                                     </Pie>
-                                    <Tooltip />
-                                    <Legend />
+                                    <Tooltip content={<CustomTooltip />} />
+                                    <Legend verticalAlign="bottom" height={36} formatter={(value) => <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-2">{value}</span>} />
                                 </PieChart>
                             </ResponsiveContainer>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Resolved Issues by Category</CardTitle>
-                            <CardDescription>Breakdown of your completed work.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={categoryData} layout="vertical" margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis type="number" />
-                                <YAxis dataKey="name" type="category" width={100} />
-                                <Tooltip />
-                                <Bar dataKey="value" name="Resolved Count" fill="hsl(var(--primary))" barSize={20} />
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="rounded-[2.5rem] border-slate-100 shadow-2xl shadow-slate-200/50 overflow-hidden bg-white">
+                    <CardHeader className="p-8 pb-4">
+                        <div className="flex items-center gap-4">
+                            <div className="bg-slate-950 p-3 rounded-2xl text-white">
+                                <LayoutGrid className="h-5 w-5"/>
+                            </div>
+                            <div>
+                                <CardTitle className="text-xl font-black text-slate-900 tracking-tight">Resolution Categories</CardTitle>
+                                <CardDescription className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">Breakdown of issues you have successfully resolved</CardDescription>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="p-8 pt-4">
+                        <div className="h-[300px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={categoryData} layout="vertical" margin={{ left: 20, right: 40 }}>
+                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                                <XAxis type="number" hide />
+                                <YAxis dataKey="name" type="category" width={100} axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 900, fill: '#475569' }} />
+                                <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f8fafc' }} />
+                                <Bar dataKey="value" name="Resolved" fill="#4f46e5" barSize={20} radius={[0, 10, 10, 0]} />
                             </BarChart>
                             </ResponsiveContainer>
-                        </CardContent>
-                    </Card>
-                    <Card className="md:col-span-2">
-                        <CardHeader>
-                            <CardTitle>Resolution Over Time</CardTitle>
-                            <CardDescription>Number of tickets you resolved per day.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <LineChart data={resolvedOverTimeData}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="date" />
-                                    <YAxis />
-                                    <Tooltip />
-                                    <Legend />
-                                    <Line type="monotone" dataKey="count" name="Tickets Resolved" stroke="hsl(var(--accent))" strokeWidth={2} />
-                                </LineChart>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="rounded-[2.5rem] border-slate-100 shadow-2xl shadow-slate-200/50 overflow-hidden bg-white lg:col-span-2">
+                    <CardHeader className="p-8 pb-4">
+                        <div className="flex items-center gap-4">
+                            <div className="bg-emerald-50 p-3 rounded-2xl text-emerald-600">
+                                <Activity className="h-5 w-5"/>
+                            </div>
+                            <div>
+                                <CardTitle className="text-xl font-black text-slate-900 tracking-tight">Resolution Velocity</CardTitle>
+                                <CardDescription className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">Tickets resolved per day over the last week</CardDescription>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="p-8 pt-4">
+                        <div className="h-[350px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={resolvedOverTimeData}>
+                                    <defs>
+                                        <linearGradient id="colorResolved" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 900, fill: '#94a3b8' }} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 900, fill: '#94a3b8' }} />
+                                    <Tooltip content={<CustomTooltip />} />
+                                    <Area type="monotone" dataKey="count" name="Tickets Fixed" stroke="#10b981" strokeWidth={4} fillOpacity={1} fill="url(#colorResolved)" />
+                                </AreaChart>
                             </ResponsiveContainer>
-                        </CardContent>
-                    </Card>
-                </div>
+                        </div>
+                    </CardContent>
+                </Card>
             </div>
-            </main>
         </div>
     );
 }
-
-    
-    

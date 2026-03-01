@@ -26,6 +26,8 @@ export type AnalyzeCompletionReportInput = z.infer<typeof AnalyzeCompletionRepor
 
 const AnalyzeCompletionReportOutputSchema = z.object({
   analysis: z.string().describe("The AI's detailed analysis of the completion report, comparing the original issue with the completed work."),
+  isSatisfactory: z.boolean().describe("Whether the work appears to be completed satisfactorily based on the before/after comparison."),
+  summary: z.string().describe("A concise (max 20 words) summary of the findings, focusing on whether the original issue is resolved."),
 });
 export type AnalyzeCompletionReportOutput = z.infer<typeof AnalyzeCompletionReportOutputSchema>;
 
@@ -58,11 +60,19 @@ Analyze both sets of information to determine if the work has been satisfactoril
 {{/each}}
 - Supervisor's notes: {{{completionNotes}}}
 
-Based on your comparison, provide a detailed analysis. Your analysis should:
-1.  Describe what the original issue was, based on all photos and notes.
+Based on your comparison, provide a detailed analysis and a decision. 
+
+In your analysis:
+1.  Describe what the original issue was.
 2.  Describe the work the supervisor claims to have done.
 3.  Compare the "before" and "after" photos.
-4.  Conclude with your assessment of whether the issue appears to be resolved.
+4.  Conclude with your assessment.
+
+In your summary:
+Provide a one-sentence high-level finding.
+
+In isSatisfactory:
+Set to true only if the visual evidence clearly shows the original problem has been addressed.
 `,
 });
 

@@ -16,7 +16,6 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  CardDescription,
   CardFooter,
 } from "@/components/ui/card";
 import {
@@ -33,7 +32,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import StatusTimeline from "./status-timeline";
-import { MapPin, Calendar, BrainCircuit, Star, FileText, Briefcase, ChevronDown, Users, ThumbsUp, ThumbsDown, MessageSquareQuote, XCircle, UserPlus, Hash, Timer, Waves, Image as ImageIcon, Camera, Upload, ShieldAlert, X, Navigation, CalendarPlus } from "lucide-react";
+import { MapPin, Calendar, BrainCircuit, Star, Users, ChevronDown, ThumbsUp, ThumbsDown, Hash, Timer, Waves, Image as ImageIcon, Camera, Upload, ShieldAlert, X, Navigation, CalendarPlus, Info, Check, Loader2, AlertCircle, Sparkles, XCircle, UserPlus, CheckCircle2 } from "lucide-react";
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -62,6 +61,7 @@ import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious
 import { useAuth } from '@/context/auth-context';
 import { Slider } from './ui/slider';
 import { Alert, AlertTitle, AlertDescription } from './ui/alert';
+import { ImageComparison } from "@/components/ui/image-comparison";
 
 import type { Ticket, Supervisor } from "@/types";
 
@@ -70,8 +70,9 @@ interface TicketCardProps {
   supervisors?: Supervisor[];
   isMunicipalView?: boolean;
   isSupervisorView?: boolean;
-isNearbyView?: boolean;
+  isNearbyView?: boolean;
   onJoinReport?: (ticketId: string) => void;
+  id?: string;
 }
 
 const priorityVariantMap: Record<Ticket['priority'], "destructive" | "secondary" | "default"> = {
@@ -92,8 +93,9 @@ const categoryToDepartmentMap: Record<string, string[]> = {
   "Other": ["Other"],
 };
 
-export default function TicketCard({ ticket, supervisors, isMunicipalView = false, isSupervisorView = false, isNearbyView = false, onJoinReport }: TicketCardProps) {
+export default function TicketCard({ ticket, supervisors, isMunicipalView = false, isSupervisorView = false, isNearbyView = false, onJoinReport, id }: TicketCardProps) {
   const { user } = useAuth();
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [assignedSupervisor, setAssignedSupervisor] = useState(ticket.assignedSupervisorId || 'unassigned');
   const [deadlineDate, setDeadlineDate] = useState<Date | undefined>(ticket.deadlineDate);
   const [completionNotes, setCompletionNotes] = useState('');
@@ -229,7 +231,7 @@ export default function TicketCard({ ticket, supervisors, isMunicipalView = fals
             }
 
             // 3. Analyze Completion
-            const { analysis } = await analyzeCompletionReport({
+            const completionResult = await analyzeCompletionReport({
                 originalPhotoUrls: ticket.imageUrls,
                 originalNotes: ticket.notes,
                 originalAudioTranscription: ticket.audioTranscription,
@@ -250,7 +252,7 @@ export default function TicketCard({ ticket, supervisors, isMunicipalView = fals
                 status: 'Pending Approval',
                 completionNotes: completionNotes,
                 completionImageUrls: imageUrls,
-                completionAnalysis: analysis,
+                completionAnalysis: completionResult,
                 rejectionReason: null, // Clear previous rejection reason
             });
 
@@ -396,7 +398,6 @@ export default function TicketCard({ ticket, supervisors, isMunicipalView = fals
   const filteredSupervisors = supervisors?.filter(s => relevantDepartments.includes(s.department) || s.department === "Other") || [];
   
   const selectedSupervisorName = supervisors?.find(s => s.id === assignedSupervisor)?.name || "Unassigned";
-  const assignedSupervisorDetails = supervisors?.find(s => s.id === ticket.assignedSupervisorId);
   const deadlineDateAsDate = ticket.deadlineDate instanceof Timestamp ? ticket.deadlineDate.toDate() : ticket.deadlineDate;
   
   const canProvideFeedback = user && ticket.status === 'Resolved' && ticket.reportedBy.includes(user.uid) && !ticket.feedback?.[user.uid];
@@ -406,8 +407,11 @@ export default function TicketCard({ ticket, supervisors, isMunicipalView = fals
     const formattedDate = format(deadlineDateAsDate, 'yyyyMMdd');
     const text = encodeURIComponent(`Resolve: ${ticket.title}`);
     const details = encodeURIComponent(`Address: ${ticket.address}\nTicket ID: ${ticket.id}`);
-    return `https://www.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${formattedDate}/${formattedDate}&details=${details}&location=${encodeURIComponent(ticket.address)}`;
+    return `https://www.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${formattedDate}/${formattedDate}/${formattedDate}/${formattedDate}&details=${details}&location=${encodeURIComponent(ticket.address)}`;
   };
+
+  const completionAnalysisData = (ticket.completionAnalysis && typeof ticket.completionAnalysis === 'object' && 'summary' in ticket.completionAnalysis) ? ticket.completionAnalysis : null;
+  const completionAnalysisText = typeof ticket.completionAnalysis === 'string' ? ticket.completionAnalysis : (completionAnalysisData as any)?.analysis;
 
   return (
     <>
@@ -420,231 +424,284 @@ export default function TicketCard({ ticket, supervisors, isMunicipalView = fals
             } else {
                  toast({
                     variant: 'destructive',
-                    title: 'Limit Reached',
+                    title: 'Too many images',
                     description: 'You can only add up to 5 images.',
                 });
             }
             setIsCameraModalOpen(false);
         }}
     />
-    <Card>
-      <CardHeader>
-        <div className="flex justify-between items-start">
-            <div>
-                <CardTitle className="font-headline">{ticket.title || ticket.category}</CardTitle>
-                <CardDescription>
-                    {ticket.category} &bull; Submitted {formatDistanceToNow(new Date(ticket.submittedDate), { addSuffix: true })}
-                </CardDescription>
+    <Card id={id} className={cn(
+      "relative rounded-[2rem] md:rounded-[3rem] border-slate-100 shadow-xl overflow-hidden bg-white hover:shadow-2xl transition-all duration-500",
+      id && "scroll-mt-32"
+    )}>
+      {ticket.status === 'Pending Approval' && (
+        <div className="absolute top-6 right-6 md:top-8 md:right-8 z-30 pointer-events-none">
+          <span className="relative flex h-4 w-4">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.6)]"></span>
+          </span>
+        </div>
+      )}
+      <CardHeader className="p-8 md:p-10 pb-6">
+        <div className="flex flex-row justify-between items-start gap-6 md:gap-10">
+            <div className="space-y-3 flex-1 w-full overflow-hidden">
+                <div className="flex flex-wrap items-center gap-3 mb-3">
+                  <Badge variant="outline" className="rounded-full px-3 md:px-4 py-1 text-xs md:text-sm font-black uppercase tracking-widest text-slate-400 border-slate-200">
+                    {ticket.category}
+                  </Badge>
+                  <span className="text-sm font-bold text-slate-300 uppercase tracking-widest hidden sm:inline">•</span>
+                  <span className="text-xs md:text-sm font-bold text-slate-400 uppercase tracking-widest">Logged {formatDistanceToNow(new Date(ticket.submittedDate), { addSuffix: true })}</span>
+                </div>
+                <CardTitle className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 tracking-tight leading-tight line-clamp-2">{ticket.title || ticket.category}</CardTitle>
             </div>
-            <Badge variant={priorityVariantMap[ticket.priority]}>{ticket.priority} Priority</Badge>
+
+            {/* Thumbnail Box */}
+            {ticket.imageUrls && ticket.imageUrls.length > 0 && (
+              <div 
+                onClick={() => setIsDetailsOpen(true)}
+                className={cn(
+                  "relative rounded-[1.25rem] md:rounded-[2rem] overflow-hidden border-4 md:border-6 border-white shadow-xl bg-slate-50 cursor-pointer transition-all duration-500 ease-in-out shrink-0",
+                  isDetailsOpen ? "w-0 h-0 opacity-0 scale-50" : "w-20 h-20 sm:w-24 sm:h-24 md:w-32 md:h-32 opacity-100 scale-100 hover:scale-105 hover:shadow-2xl"
+                )}
+              >
+                <Image src={ticket.imageUrls[0]} alt="Preview" fill className="object-cover" />
+                {ticket.imageUrls.length > 1 && (
+                  <div className="absolute inset-0 bg-black/20 flex items-center justify-center backdrop-blur-[2px]">
+                    <span className="text-white font-black text-xs sm:text-sm">+{ticket.imageUrls.length - 1}</span>
+                  </div>
+                )}
+              </div>
+            )}
+        </div>
+        <div className="mt-6">
+            <Badge variant={priorityVariantMap[ticket.priority]} className="rounded-full px-4 md:px-6 py-2 md:py-2.5 font-black uppercase tracking-widest text-xs md:text-sm">
+              {ticket.priority} Priority
+            </Badge>
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="mb-4">
+      <CardContent className="px-8 md:px-10 pb-8 md:pb-10 space-y-8 md:space-y-12">
+        <div className="bg-slate-50/50 p-6 md:p-10 rounded-[2rem] md:rounded-[3rem] border border-slate-100 overflow-x-auto scrollbar-hide">
             <StatusTimeline currentStatus={ticket.status} />
         </div>
 
         {isSupervisorView && deadlineDateAsDate && (
-          <div className="flex items-center justify-between p-3 my-4 bg-secondary/50 rounded-lg border">
-            <div className="flex items-center">
-              <Timer className="h-5 w-5 mr-3 flex-shrink-0 text-foreground" />
+          <div className="flex flex-col sm:flex-row items-center justify-between p-6 md:p-10 bg-indigo-50/50 rounded-[2rem] md:rounded-[3rem] border border-indigo-100 gap-6">
+            <div className="flex items-center gap-6 w-full sm:w-auto">
+              <div className="bg-white p-3 md:p-4 rounded-2xl shadow-sm text-indigo-600">
+                <Timer className="h-6 w-6 md:h-8 md:w-8" />
+              </div>
               <div>
-                <p className="font-semibold text-sm">Deadline</p>
-                <p className="text-sm text-muted-foreground">{format(deadlineDateAsDate, "PPP")}</p>
+                <p className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-400 leading-none mb-2">Resolution Deadline</p>
+                <p className="text-xl md:text-2xl font-black text-slate-900 leading-none">{format(deadlineDateAsDate, "PPP")}</p>
               </div>
             </div>
-            <Button asChild variant="outline" size="sm">
+            <Button asChild variant="outline" size="lg" className="w-full sm:w-auto rounded-2xl border-2 font-black text-xs md:text-sm uppercase tracking-widest h-14 px-8">
                 <Link href={generateCalendarLink()} target="_blank" rel="noopener noreferrer">
-                    <CalendarPlus className="mr-2 h-4 w-4" />
-                    Add to Calendar
+                    <CalendarPlus className="mr-3 h-5 w-5" />
+                    Sync Calendar
                 </Link>
             </Button>
           </div>
         )}
         
-        <Accordion type="single" collapsible>
-          <AccordionItem value="item-1">
-            <AccordionTrigger>View Details</AccordionTrigger>
-            <AccordionContent className="space-y-4 pt-2">
-              <Separator />
+        <Accordion 
+          type="single" 
+          collapsible 
+          className="w-full border-none"
+          value={isDetailsOpen ? "item-1" : ""}
+          onValueChange={(value) => setIsDetailsOpen(!!value)}
+        >
+          <AccordionItem value="item-1" className="border-none">
+            <AccordionTrigger className="hover:no-underline py-0 group">
+              <div className="flex items-center gap-3 text-indigo-600 font-black text-xs md:text-sm uppercase tracking-[0.2em] transition-opacity">
+                <Info className="h-4 w-4 md:h-5 md:w-5" />
+                {isDetailsOpen ? 'Hide Details' : 'Inspect Details'}
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="space-y-10 md:space-y-14 pt-10 md:pt-14">
+              <Separator className="bg-slate-100" />
 
-              {ticket.imageUrls && ticket.imageUrls.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="flex items-center text-sm font-semibold">
-                      <ImageIcon className="h-4 w-4 mr-3 flex-shrink-0 text-muted-foreground"/>
-                      <span>Submitted Photos</span>
+              {ticket.status === 'Resolved' && ticket.completionImageUrls && ticket.completionImageUrls.length > 0 ? (
+                <div className="space-y-6">
+                  <div className="flex items-center gap-3">
+                    <Sparkles className="h-5 w-5 text-indigo-600"/>
+                    <span className="text-xs font-black uppercase tracking-widest text-slate-400">Interactive Resolution Audit</span>
+                  </div>
+                  <div className="relative aspect-video w-full rounded-[2.5rem] md:rounded-[3.5rem] overflow-hidden border-4 md:border-8 border-white shadow-2xl bg-slate-950">
+                    <ImageComparison 
+                      before={ticket.imageUrls[0]} 
+                      after={ticket.completionImageUrls[0]} 
+                      beforeOverlay={
+                        <div className="absolute bottom-10 left-10 z-30 pointer-events-none">
+                          <div className="bg-slate-950/80 backdrop-blur-2xl px-6 py-3 rounded-2xl text-white flex items-center gap-3 border border-white/10 shadow-2xl">
+                            <BrainCircuit className="h-5 w-5 text-indigo-400" />
+                            <span className="text-xs font-black uppercase tracking-[0.2em]">Verified Score: {ticket.severityScore}/10</span>
+                          </div>
+                        </div>
+                      }
+                      afterOverlay={
+                        <div className="absolute bottom-10 right-10 z-30 pointer-events-none">
+                          <div className="bg-emerald-600/80 backdrop-blur-2xl px-6 py-3 rounded-2xl text-white flex items-center gap-3 border border-white/10 shadow-2xl">
+                            <CheckCircle2 className="h-5 w-5" />
+                            <span className="text-xs font-black uppercase tracking-[0.2em]">Resolution Verified</span>
+                          </div>
+                        </div>
+                      }
+                    />
+                  </div>
+                </div>
+              ) : ticket.imageUrls && ticket.imageUrls.length > 0 && (
+                  <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
+                    <div className="flex items-center gap-3">
+                      <ImageIcon className="h-5 w-5 text-slate-400"/>
+                      <span className="text-xs font-black uppercase tracking-widest text-slate-400">Incident Documentation</span>
                     </div>
                     <Carousel className="w-full">
                       <CarouselContent>
                         {ticket.imageUrls.map((url, index) => (
                           <CarouselItem key={index}>
-                            <div className="relative aspect-video w-full rounded-md overflow-hidden border">
-                              <Image src={url} alt={`Image for ticket ${ticket.id} - ${index + 1}`} fill style={{ objectFit: 'cover' }} />
+                            <div className="relative aspect-video w-full rounded-[2.5rem] md:rounded-[3.5rem] overflow-hidden border border-slate-100 shadow-inner bg-slate-50">
+                              <Image src={url} alt={`Documentation ${index + 1}`} fill className="object-cover" />
                             </div>
                           </CarouselItem>
                         ))}
                       </CarouselContent>
                       {ticket.imageUrls.length > 1 && <>
-                        <CarouselPrevious className="-left-4" />
-                        <CarouselNext className="-right-4" />
+                        <CarouselPrevious className="static translate-y-0 h-12 w-12 mt-6 mr-3" />
+                        <CarouselNext className="static translate-y-0 h-12 w-12 mt-6" />
                       </>}
                     </Carousel>
                   </div>
               )}
 
-              <div className="space-y-3 text-sm">
-                 <div className="flex items-start">
-                  <Hash className="h-4 w-4 mr-3 mt-0.5 flex-shrink-0 text-muted-foreground" />
-                  <div>
-                    <p className="font-semibold">Ticket ID</p>
-                    <p className="text-muted-foreground">{ticket.id}</p>
-                  </div>
-                </div>
-                 <div className="flex items-start">
-                  <Users className="h-4 w-4 mr-3 mt-0.5 flex-shrink-0 text-muted-foreground" />
-                  <div>
-                    <p className="font-semibold">Report Count</p>
-                    <p className="text-muted-foreground">{ticket.reportCount || 1}</p>
-                  </div>
-                </div>
-                {ticket.notes && (
-                  <div className="flex items-start">
-                    <FileText className="h-4 w-4 mr-3 mt-0.5 flex-shrink-0 text-muted-foreground" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-14">
+                <div className="space-y-8">
+                  <div className="flex items-start gap-6">
+                    <div className="bg-slate-50 p-3 rounded-2xl text-slate-400">
+                      <Hash className="h-5 w-5" />
+                    </div>
                     <div>
-                      <p className="font-semibold">User Notes</p>
-                      <p className="text-muted-foreground">{ticket.notes}</p>
+                      <p className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-400 mb-2">Incident ID</p>
+                      <p className="text-sm md:text-base font-bold text-slate-700">#{ticket.id.toUpperCase()}</p>
                     </div>
                   </div>
-                )}
-                {ticket.audioTranscription && (
-                  <div className="flex items-start">
-                    <Waves className="h-4 w-4 mr-3 mt-0.5 flex-shrink-0 text-muted-foreground" />
-                    <div>
-                        <p className="font-semibold">Audio Transcription</p>
-                        <p className="text-muted-foreground italic">"{ticket.audioTranscription}"</p>
+
+                  <div className="flex items-start gap-6">
+                    <div className="bg-slate-50 p-3 rounded-2xl text-slate-400">
+                      <MapPin className="h-5 w-5" />
                     </div>
-                  </div>
-                )}
-                <div className="flex items-center justify-between">
-                    <div className="flex items-start">
-                        <MapPin className="h-4 w-4 mr-3 mt-0.5 flex-shrink-0 text-muted-foreground" />
-                        <div>
-                            <p className="font-semibold">Location</p>
-                            <p className="text-muted-foreground">{ticket.address}</p>
-                        </div>
+                    <div className="flex-1 overflow-hidden">
+                      <p className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-400 mb-2">Location Map</p>
+                      <p className="text-sm md:text-base font-bold text-slate-700 leading-tight mb-4 line-clamp-2">{ticket.address}</p>
+                      {ticket.location && (
+                        <Button asChild variant="outline" size="lg" className="rounded-2xl border-2 font-black text-xs md:text-sm uppercase tracking-widest h-12 px-6">
+                            <Link href={`https://www.google.com/maps/dir/?api=1&destination=${ticket.location.latitude},${ticket.location.longitude}`} target="_blank" rel="noopener noreferrer">
+                                <Navigation className="mr-3 h-4 w-4" />
+                                Directions
+                            </Link>
+                        </Button>
+                      )}
                     </div>
-                    <Button asChild variant="outline" size="sm">
-                        <Link href={`https://www.google.com/maps/dir/?api=1&destination=${ticket.location.latitude},${ticket.location.longitude}`} target="_blank" rel="noopener noreferrer">
-                            <Navigation className="mr-2 h-4 w-4" />
-                            Get Directions
-                        </Link>
-                    </Button>
-                </div>
-                <div className="flex items-start">
-                  <Calendar className="h-4 w-4 mr-3 mt-0.5 flex-shrink-0 text-muted-foreground" />
-                   <div>
-                    <p className="font-semibold">Timeline</p>
-                    <p className="text-muted-foreground">Est. Resolution: {format(new Date(ticket.estimatedResolutionDate), "PPP")}</p>
                   </div>
                 </div>
 
-                {deadlineDateAsDate && !isSupervisorView && (
-                  <div className="flex items-start">
-                    <Timer className="h-4 w-4 mr-3 mt-0.5 flex-shrink-0 text-muted-foreground" />
+                <div className="space-y-8">
+                  <div className="flex items-start gap-6">
+                    <div className="bg-slate-50 p-3 rounded-2xl text-slate-400">
+                      <Users className="h-5 w-5" />
+                    </div>
                     <div>
-                      <p className="font-semibold">Deadline</p>
-                      <p className="text-muted-foreground">{format(deadlineDateAsDate, "PPP")}</p>
+                      <p className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-400 mb-2">Community Weight</p>
+                      <p className="text-sm md:text-base font-bold text-slate-700">{ticket.reportCount || 1} Citizens Active</p>
                     </div>
                   </div>
-                )}
-                
-                {ticket.assignedSupervisorName && (
-                  <div className="flex items-start">
-                    <Briefcase className="h-4 w-4 mr-3 mt-0.5 flex-shrink-0 text-muted-foreground" />
+
+                  <div className="flex items-start gap-6">
+                    <div className="bg-slate-50 p-3 rounded-2xl text-slate-400">
+                      <Calendar className="h-5 w-5" />
+                    </div>
                     <div>
-                      <p className="font-semibold">Assigned Supervisor</p>
-                      <div className="flex items-center gap-2">
-                        <p className="text-muted-foreground">{ticket.assignedSupervisorName}</p>
-                        {isMunicipalView && assignedSupervisorDetails && (assignedSupervisorDetails.aiImageWarningCount || 0) > 0 && (
-                           <Badge variant="destructive" className="flex items-center gap-1">
-                                <ShieldAlert className="h-3 w-3" />
-                                {assignedSupervisorDetails.aiImageWarningCount} AI Warning(s)
-                            </Badge>
-                        )}
-                      </div>
+                      <p className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-400 mb-2">Projected Resolution</p>
+                      <p className="text-sm md:text-base font-bold text-slate-700">{format(new Date(ticket.estimatedResolutionDate), "PPP")}</p>
                     </div>
                   </div>
-                )}
-                 
-                {isSupervisorView && ticket.rejectionReason && (
-                   <div className="flex items-start p-3 bg-destructive/10 rounded-md">
-                    <XCircle className="h-4 w-4 mr-3 mt-0.5 flex-shrink-0 text-destructive" />
-                    <div>
-                      <p className="font-semibold text-destructive">Reason for Prior Rejection</p>
-                      <p className="text-destructive/80">{ticket.rejectionReason}</p>
-                    </div>
-                  </div>
-                )}
+                </div>
               </div>
 
-              {ticket.severityScore && ticket.severityReasoning && (
-                <>
-                  <Separator />
-                  <div className="space-y-3 text-sm p-3 bg-secondary/50 rounded-md">
-                     <div className="flex items-start">
-                        <BrainCircuit className="h-4 w-4 mr-3 mt-0.5 flex-shrink-0 text-muted-foreground" />
-                        <div>
-                            <p className="font-semibold">AI Image Analysis (Original)</p>
-                            <p className="text-muted-foreground">{ticket.severityReasoning}</p>
-                        </div>
+              {(ticket.notes || ticket.audioTranscription) && (
+                <div className="bg-slate-50 p-10 md:p-14 rounded-[2.5rem] md:rounded-[3.5rem] border border-slate-100 space-y-10">
+                  {ticket.notes && (
+                    <div className="space-y-4">
+                      <p className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-400">Written Context</p>
+                      <p className="text-base md:text-lg font-medium text-slate-600 leading-relaxed italic">"{ticket.notes}"</p>
                     </div>
-                     <div className="flex items-start">
-                        <Star className="h-4 w-4 mr-3 mt-0.5 flex-shrink-0 text-muted-foreground" />
-                        <div>
-                            <p className="font-semibold">AI Severity Score</p>
-                            <p className="text-muted-foreground">{ticket.severityScore} / 10</p>
-                        </div>
+                  )}
+                  {ticket.audioTranscription && (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3">
+                        <Waves className="h-5 w-5 text-indigo-600" />
+                        <p className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-400">Audio Transcription</p>
+                      </div>
+                      <p className="text-base md:text-lg font-medium text-slate-600 italic">"{ticket.audioTranscription}"</p>
                     </div>
-                  </div>
-                </>
+                  )}
+                </div>
               )}
 
-              {ticket.completionNotes && (
-                <>
-                  <Separator />
-                  <div className="space-y-3 pt-4">
-                    <div className="flex items-start">
-                      <MessageSquareQuote className="h-4 w-4 mr-3 mt-0.5 flex-shrink-0 text-muted-foreground" />
+              {ticket.severityScore && (
+                <div className={cn(
+                  "rounded-[2.5rem] md:rounded-[3.5rem] p-10 md:p-14 text-white relative overflow-hidden shadow-2xl transition-colors duration-500",
+                  ticket.severityScore >= 8 ? "bg-red-600 shadow-red-900/20" : 
+                  ticket.severityScore >= 4 ? "bg-orange-600 shadow-orange-900/20" : 
+                  "bg-slate-900 shadow-slate-900/20"
+                )}>
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-[100px] -mr-32 -mt-32"></div>
+                  <div className="relative z-10 space-y-10">
+                    <div className="grid grid-cols-2 gap-10">
                       <div>
-                        <p className="font-semibold text-sm">Supervisor's Completion Report</p>
-                        <p className="text-muted-foreground text-sm">{ticket.completionNotes}</p>
+                        <p className={cn(
+                          "text-xs md:text-sm font-black uppercase tracking-widest mb-4",
+                          ticket.severityScore >= 4 ? "text-white/70" : "text-indigo-400"
+                        )}>Severity Analysis</p>
+                        <div className="text-5xl md:text-6xl font-black flex items-baseline gap-2">
+                          {ticket.severityScore}<span className="text-2xl opacity-40">/10</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-end">
+                        <div className={cn(
+                          "p-4 md:p-6 rounded-3xl shadow-xl text-white",
+                          ticket.severityScore >= 4 ? "bg-white/20 backdrop-blur-md" : "bg-indigo-600"
+                        )}>
+                          <BrainCircuit className="h-8 w-8 md:h-10 md:w-10" />
+                        </div>
                       </div>
                     </div>
-                    {ticket.completionImageUrls && ticket.completionImageUrls.length > 0 && (
-                      <div className="space-y-2">
-                         <div className="flex items-center text-sm font-semibold">
-                            <ImageIcon className="h-4 w-4 mr-3 flex-shrink-0 text-muted-foreground"/>
-                            <span>Completion Photos</span>
-                         </div>
-                        <Carousel className="w-full">
-                          <CarouselContent>
-                            {ticket.completionImageUrls.map((url, index) => (
-                              <CarouselItem key={index}>
-                                <div className="relative aspect-video w-full rounded-md overflow-hidden border">
-                                  <Image src={url} alt={`Completion photo ${index + 1}`} fill style={{ objectFit: 'cover' }} />
-                                </div>
-                              </CarouselItem>
-                            ))}
-                          </CarouselContent>
-                          {ticket.completionImageUrls.length > 1 && <>
-                            <CarouselPrevious className="-left-4" />
-                            <CarouselNext className="-right-4" />
-                          </>}
-                        </Carousel>
+                    {ticket.severityReasoning && (
+                      <div className="space-y-4">
+                        <p className={cn(
+                          "text-xs md:text-sm font-black uppercase tracking-widest",
+                          ticket.severityScore >= 4 ? "text-white/70" : "text-indigo-400"
+                        )}>AI Reasoning</p>
+                        <p className="text-base md:text-xl text-white/90 font-medium leading-relaxed">{ticket.severityReasoning}</p>
                       </div>
                     )}
                   </div>
-                </>
+                </div>
+              )}
+
+              {ticket.completionNotes && (
+                <div className="space-y-10 pt-10 border-t border-slate-100">
+                  <div className="flex items-start gap-6">
+                    <div className="bg-emerald-50 p-3 md:p-4 rounded-2xl text-emerald-600 shadow-sm">
+                      <Check className="h-6 w-6 md:h-8 md:w-8" />
+                    </div>
+                    <div>
+                      <p className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-400 mb-3">Resolution Report</p>
+                      <p className="text-base md:text-lg font-bold text-slate-700 leading-relaxed">{ticket.completionNotes}</p>
+                    </div>
+                  </div>
+                </div>
               )}
 
             </AccordionContent>
@@ -652,26 +709,26 @@ export default function TicketCard({ ticket, supervisors, isMunicipalView = fals
         </Accordion>
         
         {isMunicipalView && ticket.status === 'Submitted' && supervisors && (
-          <div className="mt-4 flex flex-col md:flex-row items-center gap-2">
+          <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="w-full justify-between">
-                  {selectedSupervisorName}
-                  <ChevronDown className="h-4 w-4" />
+                <Button variant="outline" className="w-full h-14 md:h-16 rounded-2xl border-2 font-black justify-between px-6 md:px-8 text-sm md:text-base">
+                  <span className="truncate">{selectedSupervisorName}</span>
+                  <ChevronDown className="h-5 w-5 shrink-0" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)]">
+              <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] rounded-[2rem] p-3 border-2 shadow-2xl">
                 <DropdownMenuRadioGroup value={assignedSupervisor} onValueChange={setAssignedSupervisor}>
-                  <DropdownMenuRadioItem value="unassigned">Unassigned</DropdownMenuRadioItem>
-                  <DropdownMenuSeparator />
+                  <DropdownMenuRadioItem value="unassigned" className="rounded-xl font-bold py-3">Unassigned</DropdownMenuRadioItem>
+                  <DropdownMenuSeparator className="my-3" />
                   {filteredSupervisors.length > 0 ? (
                     filteredSupervisors.map((supervisor) => (
-                      <DropdownMenuRadioItem key={supervisor.id} value={supervisor.id}>
+                      <DropdownMenuRadioItem key={supervisor.id} value={supervisor.id} className="rounded-xl font-bold py-4">
                         {supervisor.name} ({supervisor.department})
                       </DropdownMenuRadioItem>
                     ))
                   ) : (
-                     <div className="px-2 py-1.5 text-sm text-muted-foreground">No relevant supervisors found.</div>
+                     <div className="px-6 py-4 text-sm font-bold text-slate-400 uppercase tracking-widest">No relevant staff found.</div>
                   )}
                 </DropdownMenuRadioGroup>
               </DropdownMenuContent>
@@ -682,15 +739,15 @@ export default function TicketCard({ ticket, supervisors, isMunicipalView = fals
                     <Button
                     variant={"outline"}
                     className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !deadlineDate && "text-muted-foreground"
+                        "w-full h-14 md:h-16 rounded-2xl border-2 font-black justify-start px-6 md:px-8 text-sm md:text-base",
+                        !deadlineDate && "text-slate-400"
                     )}
                     >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {deadlineDate ? format(deadlineDate, "PPP") : <span>Pick a deadline</span>}
+                    <CalendarIcon className="mr-3 h-5 w-5 md:h-6 md:w-6 text-indigo-600" />
+                    {deadlineDate ? format(deadlineDate, "PPP") : <span>Set Deadline</span>}
                     </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
+                <PopoverContent className="w-auto p-0 rounded-[2.5rem] border-2 shadow-2xl overflow-hidden" align="start">
                     <CalendarComponent
                         mode="single"
                         selected={deadlineDate}
@@ -700,184 +757,249 @@ export default function TicketCard({ ticket, supervisors, isMunicipalView = fals
                 </PopoverContent>
             </Popover>
 
-            <Button onClick={handleSupervisorAssignment} disabled={isSubmitting} className="w-full md:w-auto">
-              {isSubmitting ? 'Assigning...' : 'Assign'}
+            <Button onClick={handleSupervisorAssignment} disabled={isSubmitting} className="w-full h-14 md:h-16 rounded-2xl bg-indigo-600 hover:bg-indigo-700 font-black shadow-xl shadow-indigo-600/20 text-base md:text-xl">
+              {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : 'Assign Task'}
             </Button>
           </div>
         )}
 
         {isMunicipalView && ticket.status === 'Pending Approval' && (
-            <div className="mt-4 space-y-4">
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                    <h4 className="font-semibold mb-2">Review Supervisor's Report</h4>
-                    
-                    {ticket.completionAnalysis && (
-                        <div className="space-y-2 text-sm p-3 mb-4 bg-blue-50 border border-blue-200 rounded-md">
-                            <div className="flex items-start">
-                                <BrainCircuit className="h-4 w-4 mr-3 mt-0.5 flex-shrink-0 text-blue-600" />
-                                <div>
-                                    <p className="font-semibold text-blue-800">AI Completion Analysis</p>
-                                    <p className="text-blue-700">{ticket.completionAnalysis}</p>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                    
-                    <div className="flex gap-2 mt-4">
-                        <Button onClick={handleApproval} disabled={isSubmitting} className="flex-1 bg-green-600 hover:bg-green-700">
-                           <ThumbsUp className="mr-2 h-4 w-4"/> Approve
-                        </Button>
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <Button variant="destructive" className="flex-1" disabled={isSubmitting}><ThumbsDown className="mr-2 h-4 w-4"/> Reject</Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                <AlertDialogTitle>Reject Completion Report?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                    This will penalize the supervisor's trust score. Please provide a reason for rejecting this report. The supervisor will be notified and asked to resubmit.
-                                </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <div className="space-y-2">
-                                    <Label htmlFor="rejectionReason">Rejection Reason</Label>
-                                    <Textarea id="rejectionReason" value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} placeholder="e.g., The issue is still visible..." />
-                                </div>
-                                <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={handleRejection} disabled={isSubmitting || !rejectionReason}>Submit Rejection</AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
+            <div className="mt-8 p-8 md:p-12 bg-indigo-50/50 border border-indigo-100 rounded-[2.5rem] md:rounded-[3.5rem] space-y-10">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-lg shadow-indigo-600/20">
+                      <ShieldAlert className="h-6 w-6" />
                     </div>
+                    <h4 className="text-xs md:text-sm font-black uppercase tracking-[0.2em] text-slate-900 italic">Audit Verification</h4>
+                  </div>
+                  <Badge variant="outline" className="bg-white border-indigo-100 text-indigo-600 font-black text-[10px] uppercase px-4 py-1">Intelligence v2.0</Badge>
+                </div>
+                
+                {completionAnalysisData && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="bg-slate-950 p-8 rounded-[2rem] text-white relative overflow-hidden shadow-xl border border-white/5">
+                          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-600/10 rounded-full blur-3xl"></div>
+                          <div className="relative z-10 space-y-4">
+                              <div className="flex items-center gap-3">
+                                  <Sparkles className="h-5 w-5 text-indigo-400" />
+                                  <p className="text-xs font-black uppercase tracking-widest text-slate-400">Findings Highlight</p>
+                              </div>
+                              <p className="text-base font-bold italic leading-relaxed text-indigo-50">
+                                  "{completionAnalysisData.summary}"
+                              </p>
+                          </div>
+                      </div>
+
+                      <div className={cn(
+                          "p-8 rounded-[2rem] border-2 shadow-sm flex flex-col justify-center",
+                          completionAnalysisData.isSatisfactory 
+                              ? "bg-emerald-50 border-emerald-100" 
+                              : "bg-red-50 border-red-100"
+                      )}>
+                          <div className="flex items-center gap-3 mb-2">
+                              {completionAnalysisData.isSatisfactory 
+                                  ? <Check className="h-6 w-6 text-emerald-600" /> 
+                                  : <AlertCircle className="h-6 w-6 text-red-600" />
+                              }
+                              <p className={cn(
+                                  "text-xs font-black uppercase tracking-widest",
+                                  completionAnalysisData.isSatisfactory ? "text-emerald-700" : "text-red-700"
+                              )}>Recommended Action</p>
+                          </div>
+                          <p className={cn(
+                              "text-xl font-black tracking-tight",
+                              completionAnalysisData.isSatisfactory ? "text-emerald-900" : "text-red-900"
+                          )}>
+                              {completionAnalysisData.isSatisfactory 
+                                  ? "Confirm Resolution" 
+                                  : "Request Correction"
+                              }
+                          </p>
+                      </div>
+                  </div>
+                )}
+
+                {completionAnalysisText && (
+                    <div className="bg-white/60 p-8 md:p-10 rounded-[2rem] md:rounded-[3rem] border border-slate-100 shadow-inner space-y-5">
+                        <div className="flex items-center gap-3">
+                            <BrainCircuit className="h-5 w-5 text-indigo-600" />
+                            <p className="text-xs font-black uppercase tracking-widest text-slate-400">Detailed Review</p>
+                        </div>
+                        <p className="text-base md:text-lg font-medium text-slate-600 leading-relaxed italic border-l-4 border-slate-100 pl-6 py-2">
+                            {completionAnalysisText}
+                        </p>
+                    </div>
+                )}
+                
+                <div className="flex flex-col sm:flex-row gap-5 pt-4">
+                    <Button onClick={handleApproval} disabled={isSubmitting} className="flex-1 h-14 md:h-16 rounded-2xl bg-emerald-600 hover:bg-emerald-700 font-black shadow-lg shadow-emerald-600/20 text-xs md:text-sm uppercase tracking-widest">
+                       <ThumbsUp className="mr-3 h-5 w-5"/> Confirm Resolution
+                    </Button>
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="outline" className="flex-1 h-14 md:h-16 rounded-2xl border-2 border-red-200 text-red-600 hover:bg-red-50 font-black text-xs md:text-sm uppercase tracking-widest" disabled={isSubmitting}><ThumbsDown className="mr-3 h-5 w-5"/> Reject Work</Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent className="rounded-[3rem] md:rounded-[4rem] p-10 md:p-14 border-none shadow-2xl w-[90vw] md:w-full">
+                            <AlertDialogHeader className="space-y-5">
+                            <AlertDialogTitle className="text-2xl md:text-4xl font-black tracking-tighter">Confirm Rejection?</AlertDialogTitle>
+                            <AlertDialogDescription className="text-sm md:text-base font-medium text-slate-500 leading-relaxed">
+                                This will penalize the staff trust score. Please provide a clear reason to guide their resubmission.
+                            </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <div className="space-y-5 my-8">
+                                <Label htmlFor="rejectionReason" className="text-xs font-black uppercase tracking-widest text-slate-400 ml-2">Refusal Context</Label>
+                                <Textarea id="rejectionReason" value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} placeholder="What is missing or incorrect..." className="rounded-2xl border-2 min-h-[140px] p-6 text-base" />
+                            </div>
+                            <AlertDialogFooter className="flex flex-col sm:flex-row gap-4">
+                            <AlertDialogCancel className="h-14 rounded-2xl font-black text-xs md:text-sm uppercase tracking-widest border-2 w-full sm:w-auto">Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleRejection} disabled={isSubmitting || !rejectionReason} className="h-14 rounded-2xl bg-destructive font-black text-xs md:text-sm uppercase tracking-widest px-8 w-full sm:w-auto">Reject Report</AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
                 </div>
             </div>
         )}
 
         {isSupervisorView && ticket.status === 'In Progress' && (
-            <div className="mt-4 space-y-4">
-                <Alert variant="destructive">
-                    <ShieldAlert className="h-4 w-4" />
-                    <AlertTitle>Authenticity Notice</AlertTitle>
-                    <AlertDescription>
-                        Do not upload AI-generated images. Submitting inauthentic photos of completed work will result in a trust score penalty.
+            <div className="mt-8 p-8 md:p-12 bg-slate-50 border border-slate-100 rounded-[2.5rem] md:rounded-[3.5rem] space-y-10 md:space-y-14">
+                <Alert className="bg-indigo-600 border-none text-white rounded-[2rem] md:rounded-[3rem] p-8 md:p-10 shadow-xl shadow-indigo-600/20">
+                    <ShieldAlert className="h-8 w-8 text-white" />
+                    <AlertTitle className="font-black uppercase tracking-widest text-xs md:text-sm mb-4">Authenticity Guard</AlertTitle>
+                    <AlertDescription className="font-medium text-indigo-50/80 text-sm md:text-base leading-relaxed">
+                        Our AI monitors all submissions. Uploading fake media will result in an immediate Trust Score penalty.
                     </AlertDescription>
                 </Alert>
 
                 {ticket.rejectionReason && (
-                     <div className="flex items-start p-3 bg-destructive/10 rounded-md border border-destructive/20">
-                        <XCircle className="h-4 w-4 mr-3 mt-0.5 flex-shrink-0 text-destructive" />
-                        <div>
-                        <p className="font-semibold text-destructive text-sm">Reason for Prior Rejection:</p>
-                        <p className="text-sm text-destructive/90">{ticket.rejectionReason}</p>
+                     <div className="p-8 md:p-10 bg-destructive/5 rounded-[2rem] md:rounded-[3rem] border border-destructive/10 space-y-4">
+                        <div className="flex items-center gap-3 text-destructive">
+                          <XCircle className="h-6 w-6" />
+                          <p className="text-xs md:text-sm font-black uppercase tracking-widest">Correction Required</p>
                         </div>
+                        <p className="text-sm md:text-base font-bold text-slate-700 leading-relaxed italic">"{ticket.rejectionReason}"</p>
                     </div>
                 )}
-                <div className="space-y-2">
-                    <Label>Completion Photos (1-5)</Label>
+
+                <div className="space-y-8">
+                    <Label className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-400">Resolution Evidence (1-5 Photos)</Label>
                     {completionPhotoDataUris.length > 0 ? (
                         <Carousel>
                             <CarouselContent>
                                 {completionPhotoDataUris.map((uri, index) => (
                                     <CarouselItem key={index}>
                                         <div className="relative aspect-video w-full">
-                                            <Image src={uri} alt={`Completion Preview ${index + 1}`} fill style={{ objectFit: 'cover' }} className="rounded-md" />
+                                            <Image src={uri} alt={`Resolution ${index + 1}`} fill className="object-cover rounded-[2.5rem] md:rounded-[3.5rem] border border-slate-100" />
                                             <Button
                                                 type="button"
                                                 variant="destructive"
                                                 size="icon"
-                                                className="absolute top-2 right-2 h-7 w-7 z-10"
+                                                className="absolute top-4 right-4 md:top-6 md:right-6 h-10 w-10 md:h-12 md:w-12 z-10 rounded-2xl md:rounded-3xl shadow-xl"
                                                 onClick={() => removeCompletionPhoto(index)}
                                             >
-                                                <X className="h-4 w-4" />
+                                                <X className="h-6 w-6 md:h-7 md:w-7" />
                                             </Button>
                                         </div>
                                     </CarouselItem>
                                 ))}
                             </CarouselContent>
                             {completionPhotoDataUris.length > 1 && <>
-                                <CarouselPrevious className="-left-4" />
-                                <CarouselNext className="-right-4" />
+                                <CarouselPrevious className="static translate-y-0 h-12 w-12 mt-6 mr-3" />
+                                <CarouselNext className="static translate-y-0 h-12 w-12 mt-6" />
                             </>}
                         </Carousel>
                     ) : (
-                        <div className="relative aspect-video w-full bg-muted rounded-md overflow-hidden border flex items-center justify-center">
-                            <div className="text-center text-muted-foreground p-4">
-                                <ImageIcon className="mx-auto h-12 w-12" />
-                                <p>Upload 1-5 photos of the completed work</p>
-                            </div>
+                        <div className="relative min-h-[200px] py-12 w-full bg-white rounded-[2.5rem] md:rounded-[3.5rem] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center group hover:border-indigo-300 transition-colors">
+                            <ImageIcon className="h-16 w-16 md:h-24 md:w-24 text-slate-200 group-hover:scale-110 transition-transform duration-500 mb-6" />
+                            <p className="text-sm md:text-lg font-bold text-slate-400 text-center px-8">Capture or upload evidence of completion.</p>
                         </div>
                     )}
-                    <div className="flex justify-center gap-2">
-                        <Button type="button" size="sm" variant="outline" onClick={() => setIsCameraModalOpen(true)} disabled={completionPhotoDataUris.length >= 5}>
-                            <Camera className="mr-2" /> Capture
+                    <div className="grid grid-cols-2 gap-2 md:gap-6">
+                        <Button type="button" variant="outline" className="h-14 md:h-16 rounded-2xl font-black border-2 hover:bg-slate-50 text-[9px] md:text-sm px-2" onClick={() => setIsCameraModalOpen(true)} disabled={completionPhotoDataUris.length >= 5}>
+                            <Camera className="mr-1 h-4 w-4 md:h-6 md:w-6" /> Capture
+                        </Button>
+                        <Button type="button" variant="outline" className="h-14 md:h-16 rounded-2xl font-black border-2 hover:bg-slate-50 text-[9px] md:text-sm px-2" onClick={() => completionFileInputRef.current?.click()} disabled={completionPhotoDataUris.length >= 5}>
+                            <Upload className="mr-1 h-4 w-4 md:h-6 md:w-6" /> Upload
                         </Button>
                         <Input ref={completionFileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleCompletionFileSelect} />
-                        <Button type="button" size="sm" variant="outline" onClick={() => completionFileInputRef.current?.click()} disabled={completionPhotoDataUris.length >= 5}>
-                            <Upload className="mr-2" /> Upload
-                        </Button>
                     </div>
                 </div>
 
-                <div className="space-y-2">
-                    <Label htmlFor={`completion-notes-${ticket.id}`}>Completion Report</Label>
+                <div className="space-y-6">
+                    <Label htmlFor={`completion-notes-${ticket.id}`} className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-400">Resolution Summary</Label>
                     <Textarea 
                         id={`completion-notes-${ticket.id}`} 
-                        placeholder="Describe the work you completed..."
+                        placeholder="Detail the actions taken to resolve this incident..."
                         value={completionNotes}
                         onChange={(e) => setCompletionNotes(e.target.value)}
+                        className="rounded-[2rem] md:rounded-[2.5rem] border-2 font-medium p-8 md:p-10 min-h-[160px] md:min-h-[200px] resize-none text-base md:text-lg"
                     />
                 </div>
-                <Button onClick={handleReportSubmission} disabled={isSubmitting || completionPhotoDataUris.length < 1 || completionPhotoDataUris.length > 5} className="w-full">
-                    {isSubmitting ? 'Submitting...' : 'Submit for Approval'}
+                <Button onClick={handleReportSubmission} disabled={isSubmitting || completionPhotoDataUris.length < 1 || completionPhotoDataUris.length > 5} className="w-full h-16 md:h-20 rounded-2xl bg-indigo-600 hover:bg-indigo-700 font-black shadow-xl shadow-indigo-600/20 text-base md:text-xl">
+                    {isSubmitting ? <Loader2 className="h-8 w-8 animate-spin" /> : 'Submit Verification'}
                 </Button>
             </div>
         )}
       </CardContent>
+
        {isNearbyView && ticket.status !== 'Resolved' && onJoinReport && (
-        <CardFooter>
-          <Button variant="outline" className="w-full" onClick={() => onJoinReport(ticket.id)}>
-            <UserPlus className="mr-2 h-4 w-4" />
-            Join Report
+        <CardFooter className="px-8 md:px-10 pb-8 md:pb-10 pt-0">
+          <Button variant="outline" className="w-full h-14 md:h-16 rounded-2xl border-2 font-black hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all text-lg md:text-xl shadow-sm" onClick={() => onJoinReport(ticket.id)}>
+            <UserPlus className="mr-3 h-5 w-5 md:h-6 md:w-6" />
+            Join This Report
           </Button>
         </CardFooter>
       )}
 
       {user && ticket.status === 'Resolved' && (
-        <CardFooter className="flex-col items-start gap-4">
-            <Separator />
+        <CardFooter className="flex-col items-start gap-10 md:gap-14 px-8 md:px-10 pb-8 md:pb-10 pt-0">
+            <Separator className="bg-slate-100" />
             {canProvideFeedback ? (
-                <div className="w-full space-y-4">
-                    <Label className="font-medium">Was this issue resolved to your satisfaction? Please rate the work and leave a comment.</Label>
-                     <div className="space-y-2">
-                        <div className="flex items-center gap-4">
+                <div className="w-full space-y-10 md:space-y-14 animate-in fade-in slide-in-from-bottom-2 duration-700">
+                    <div>
+                      <div className="flex items-center gap-3 mb-3">
+                        <Star className="h-6 w-6 text-amber-500" />
+                        <h4 className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-900">Final Feedback</h4>
+                      </div>
+                      <p className="text-sm md:text-base font-medium text-slate-500">How was the resolution quality? Your feedback impacts staff scores.</p>
+                    </div>
+
+                     <div className="bg-slate-50 p-10 md:p-14 rounded-[2.5rem] md:rounded-[3.5rem] border border-slate-100 space-y-10 md:space-y-14">
+                        <div className="space-y-6">
+                            <div className="flex justify-between items-center px-4">
+                              <span className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-400">Rating</span>
+                              <Badge variant="secondary" className="w-14 h-10 md:w-16 md:h-12 flex items-center justify-center text-xl md:text-2xl font-black rounded-xl md:rounded-2xl bg-white shadow-sm border-2 border-indigo-100 text-indigo-600">
+                                {feedbackRating}
+                              </Badge>
+                            </div>
                             <Slider
                                 value={[feedbackRating]}
                                 onValueChange={(value) => setFeedbackRating(value[0])}
                                 max={10}
                                 min={1}
                                 step={1}
-                                className="flex-1"
+                                className="px-4"
                             />
-                            <Badge variant="secondary" className="w-12 h-8 flex items-center justify-center text-lg">
-                                {feedbackRating}
-                            </Badge>
+                        </div>
+                        <div className="space-y-6">
+                            <Label className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-400 ml-4">Comments (Optional)</Label>
+                            <Textarea
+                                value={feedbackComment}
+                                onChange={(e) => setFeedbackComment(e.target.value)}
+                                placeholder="Details about the work performed..."
+                                className="rounded-2xl md:rounded-3xl border-2 font-medium bg-white p-8 text-base md:text-lg"
+                            />
                         </div>
                     </div>
-                    <div className="space-y-2">
-                        <Textarea
-                            value={feedbackComment}
-                            onChange={(e) => setFeedbackComment(e.target.value)}
-                            placeholder="e.g., The pothole was filled, but the road is still uneven. (Optional)"
-                        />
-                    </div>
-                    <div className="flex gap-2">
-                        <Button className="w-full" onClick={handleFeedback} disabled={isSubmitting}>
-                           Submit Feedback
-                        </Button>
-                    </div>
+                    <Button className="w-full h-16 md:h-20 rounded-2xl bg-indigo-600 hover:bg-indigo-700 font-black shadow-xl shadow-indigo-600/20 text-base md:text-xl" onClick={handleFeedback} disabled={isSubmitting}>
+                       {isSubmitting ? <Loader2 className="h-8 w-8 animate-spin" /> : 'Submit Feedback'}
+                    </Button>
                 </div>
             ) : (
-                <p className="text-sm text-muted-foreground w-full text-center">Thank you for your feedback!</p>
+                <div className="w-full flex items-center justify-center p-10 md:p-14 bg-emerald-50 rounded-[2.5rem] md:rounded-[3.5rem] border border-emerald-100">
+                  <p className="text-xs md:text-sm font-black uppercase tracking-[0.2em] text-emerald-600 flex items-center gap-3">
+                    <Check className="h-6 w-6" /> Thank you for your feedback!
+                  </p>
+                </div>
             )}
         </CardFooter>
        )}
@@ -885,5 +1007,3 @@ export default function TicketCard({ ticket, supervisors, isMunicipalView = fals
     </>
   );
 }
-
-    
